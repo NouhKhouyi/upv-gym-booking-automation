@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.venv
+venv
+__pycache__
+.pytest_cache
+.ruff_cache
+AutoReservasRequests
+AutoReservasSelenium
+upv-gym-booking-automation
+tests
+*.csv
+*.ipynb
+chromedriver.exe

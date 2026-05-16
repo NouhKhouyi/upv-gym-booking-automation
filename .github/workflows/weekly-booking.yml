@@ -1,0 +1,63 @@
+name: Weekly UPV booking
+
+on:
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: "Comma-separated session codes. Leave empty to use repository variable UPV_SESSION_CODES."
+        required: false
+        type: string
+      dry_run:
+        description: "Use true to test without booking. Scheduled runs always reserve."
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  schedule:
+    - cron: "0 10 * * SAT"
+      timezone: "Europe/Madrid"
+
+concurrency:
+  group: weekly-upv-booking
+  cancel-in-progress: false
+
+jobs:
+  reserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: python -m pip install .
+
+      - name: Reserve configured sessions
+        env:
+          UPV_DNI: ${{ secrets.UPV_DNI }}
+          UPV_PASSWORD: ${{ secrets.UPV_PASSWORD }}
+          UPV_MAX_ATTEMPTS: "3"
+          BOOKING_CODES: ${{ github.event.inputs.codes || vars.UPV_SESSION_CODES }}
+          MANUAL_DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE="--reserve"
+          elif [ "$MANUAL_DRY_RUN" = "true" ]; then
+            MODE="--dry-run"
+          else
+            MODE="--reserve"
+          fi
+
+          if [ -n "$BOOKING_CODES" ]; then
+            upv-gym-booking "$MODE" --codes "$BOOKING_CODES" --attempts "$UPV_MAX_ATTEMPTS" -v
+          else
+            upv-gym-booking "$MODE" --attempts "$UPV_MAX_ATTEMPTS" -v
+          fi
