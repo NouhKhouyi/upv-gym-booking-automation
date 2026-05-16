@@ -98,7 +98,9 @@ def main(argv: list[str] | None = None) -> int:
                 for item in results:
                     print(f"[DRY-RUN] MUS{item['session_code']} | {item['label']} | {item['url']}")
                 return 0
-            results = client._run_reservations(config, links)
+            debug_dir = Path(args.debug_dir)
+            results = client._run_reservations(config, links, debug_dir=debug_dir)
+            _write_results_artifact(debug_dir, results)
         else:
             results = client.run(config)
     except Exception as exc:  # noqa: BLE001
@@ -117,6 +119,10 @@ def main(argv: list[str] | None = None) -> int:
             f"[{status}] MUS{result.link.session_code} | "
             f"{result.link.label} | {result.link.url}{suffix}"
         )
+        if result.attempted:
+            print(f"  action_url: {result.action_url}")
+            print(f"  refresh_url: {result.refresh_url}")
+            print(f"  message: {result.message}")
 
     failed_attempts = [result for result in results if result.attempted and not result.success]
     return 1 if failed_attempts else 0
@@ -160,6 +166,28 @@ def _write_debug_artifacts(
         encoding="utf-8",
     )
     print(f"Debug artifacts written to: {output_dir}")
+
+
+def _write_results_artifact(output_dir: Path, results: list) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = [
+        {
+            "session_code": f"MUS{result.link.session_code}",
+            "label": result.link.label,
+            "reservation_url": result.link.url,
+            "attempted": result.attempted,
+            "success": result.success,
+            "status_code": result.status_code,
+            "message": result.message,
+            "action_url": result.action_url,
+            "refresh_url": result.refresh_url,
+        }
+        for result in results
+    ]
+    (output_dir / "results.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=True),
+        encoding="utf-8",
+    )
 
 
 def _summarize_activity_rows(soup: BeautifulSoup) -> list[dict[str, str | None]]:
