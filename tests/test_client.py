@@ -1,4 +1,4 @@
-from upv_gym_booking.client import find_reservation_links
+from upv_gym_booking.client import find_reservation_links, is_session_registered
 
 
 def test_find_reservation_links_keeps_requested_order_and_normalizes_urls() -> None:
@@ -109,3 +109,46 @@ def test_find_reservation_links_does_not_use_cancel_links() -> None:
     """
 
     assert find_reservation_links(html, ("071",)) == []
+
+
+def test_is_session_registered_detects_already_inscribed_cell() -> None:
+    html = """
+    <table>
+      <tr>
+        <td>17:30-18:30</td>
+        <td>MUS071 Already inscribed</td>
+      </tr>
+    </table>
+    """
+
+    assert is_session_registered(html, "071") is True
+
+
+def test_is_session_registered_detects_cancel_link_in_registered_row() -> None:
+    html = """
+    <table>
+      <tr>
+        <td>MUSCULACION 045 Friday Confirmed</td>
+        <td>
+          <a href="sic_depact.HSemActDesMat?p_codgrupo_desmat=ABC">
+            Cancel registration
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+    assert is_session_registered(html, "045") is True
+
+
+def test_is_session_registered_does_not_treat_full_as_registered() -> None:
+    html = """
+    <table>
+      <tr>
+        <td>21:30-22:30</td>
+        <td>MUS045 Only Partners Full</td>
+      </tr>
+    </table>
+    """
+
+    assert is_session_registered(html, "045") is False
