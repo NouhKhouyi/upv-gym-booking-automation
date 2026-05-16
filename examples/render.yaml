@@ -1,0 +1,16 @@
+services:
+  - type: cron
+    name: upv-gym-booking
+    runtime: python
+    schedule: "55 6 * * 1-5"
+    buildCommand: "pip install ."
+    startCommand: "upv-gym-booking --reserve"
+    envVars:
+      - key: UPV_DNI
+        sync: false
+      - key: UPV_PASSWORD
+        sync: false
+      - key: UPV_SESSION_CODES
+        value: "009,024,039"
+      - key: UPV_DRY_RUN
+        value: "false"

@@ -1,0 +1,39 @@
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+debug/
+**/dni.txt
+**/contra.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter and generated analysis files
+.ipynb_checkpoints/
+*.csv
+
+# Browser drivers and local binaries
+chromedriver.exe
+*.log
+
+# Legacy local material kept for reference, not for the public repo
+AutoReservasRequests/
+AutoReservasSelenium/
+upv-gym-booking-automation/
