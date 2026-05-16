@@ -107,19 +107,16 @@ class UpvGymClient:
         refresh_response.raise_for_status()
         self._ensure_activity_page_is_authenticated(refresh_response)
 
-        success = (
-            action_response.status_code == requests.codes.ok
-            and refresh_response.status_code == requests.codes.ok
-        )
+        success = is_session_registered(refresh_response.text, link.session_code)
         return ReservationResult(
             link=link,
             attempted=True,
             success=success,
             status_code=refresh_response.status_code,
             message=(
-                "Reservation action and refresh completed"
+                "Reservation confirmed on refreshed activity page"
                 if success
-                else "Reservation flow did not complete"
+                else "Reservation request completed, but confirmation was not found"
             ),
         )
 
@@ -268,6 +265,34 @@ def find_reservation_links(
             )
 
     return [found_by_code[code] for code in wanted_codes if code in found_by_code]
+
+
+def is_session_registered(html: str, session_code: str) -> bool:
+    soup = BeautifulSoup(html, "html.parser")
+    code = session_code.upper().removeprefix("MUS").zfill(3)
+    status_terms = (
+        "ALREADY INSCRIBED",
+        "CONFIRMED",
+        "INSCRITO",
+        "INSCRITA",
+        "INSCRIPCION",
+        "INSCRIPCIÓN",
+        "CANCEL REGISTRATION",
+        "CANCELAR INSCRIPCION",
+        "CANCELAR INSCRIPCIÓN",
+        "ANULAR",
+    )
+
+    for row in soup.find_all("tr"):
+        row_text = row.get_text(separator=" ", strip=True)
+        if not _matches_code(row_text, "", code):
+            continue
+        row_text_upper = row_text.upper()
+        has_cancel_link = any(_is_cancel_href(link.get("href", "")) for link in row.find_all("a"))
+        if has_cancel_link or any(term in row_text_upper for term in status_terms):
+            return True
+
+    return False
 
 
 def _reservation_link_from_anchor(
