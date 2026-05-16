@@ -80,7 +80,15 @@ jobs:
           echo "Booking codes: ${BOOKING_CODES:-default env codes}"
 
           if [ -n "$BOOKING_CODES" ]; then
-            upv-gym-booking "$MODE" --codes "$BOOKING_CODES" --attempts "$UPV_MAX_ATTEMPTS" -v
+            upv-gym-booking "$MODE" --codes "$BOOKING_CODES" --attempts "$UPV_MAX_ATTEMPTS" --debug-dir action-debug -v
           else
-            upv-gym-booking "$MODE" --attempts "$UPV_MAX_ATTEMPTS" -v
+            upv-gym-booking "$MODE" --attempts "$UPV_MAX_ATTEMPTS" --debug-dir action-debug -v
           fi
+
+      - name: Upload booking debug artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-debug
+          path: action-debug/
+          if-no-files-found: ignore

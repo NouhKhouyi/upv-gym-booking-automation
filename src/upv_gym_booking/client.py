@@ -3,7 +3,9 @@ from __future__ import annotations
 import logging
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
@@ -35,6 +37,8 @@ class ReservationResult:
     success: bool
     status_code: int | None = None
     message: str = ""
+    action_url: str | None = None
+    refresh_url: str | None = None
 
 
 class UpvGymClient:
@@ -90,6 +94,7 @@ class UpvGymClient:
         link: ReservationLink,
         *,
         activity_url: str = DEFAULT_ACTIVITY_URL,
+        debug_dir: Path | None = None,
     ) -> ReservationResult:
         action_response = self.session.get(
             link.url,
@@ -97,6 +102,11 @@ class UpvGymClient:
             headers={"Referer": activity_url},
         )
         action_response.raise_for_status()
+        self._write_response_debug(
+            debug_dir,
+            f"reservation_action_MUS{link.session_code}.html",
+            action_response,
+        )
 
         refresh_response = self.session.get(
             activity_url,
@@ -106,6 +116,11 @@ class UpvGymClient:
         )
         refresh_response.raise_for_status()
         self._ensure_activity_page_is_authenticated(refresh_response)
+        self._write_response_debug(
+            debug_dir,
+            f"reservation_refresh_MUS{link.session_code}.html",
+            refresh_response,
+        )
 
         success = is_session_registered(refresh_response.text, link.session_code)
         return ReservationResult(
@@ -113,6 +128,8 @@ class UpvGymClient:
             attempted=True,
             success=success,
             status_code=refresh_response.status_code,
+            action_url=action_response.url,
+            refresh_url=refresh_response.url,
             message=(
                 "Reservation confirmed on refreshed activity page"
                 if success
@@ -149,6 +166,8 @@ class UpvGymClient:
         self,
         config: BookingConfig,
         links: list[ReservationLink],
+        *,
+        debug_dir: Path | None = None,
     ) -> list[ReservationResult]:
         pending = list(links)
         latest_results: dict[str, ReservationResult] = {}
@@ -157,7 +176,7 @@ class UpvGymClient:
             still_pending: list[ReservationLink] = []
 
             for link in pending:
-                result = self.reserve(link, activity_url=config.activity_url)
+                result = self.reserve(link, activity_url=config.activity_url, debug_dir=debug_dir)
                 latest_results[link.url] = result
                 if result.success:
                     LOGGER.info("Booked candidate %s", link.session_code)
@@ -177,6 +196,18 @@ class UpvGymClient:
                 time.sleep(config.retry_seconds)
 
         return [latest_results[link.url] for link in links if link.url in latest_results]
+
+    def _write_response_debug(
+        self,
+        debug_dir: Path | None,
+        filename: str,
+        response: requests.Response,
+    ) -> None:
+        if debug_dir is None:
+            return
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        (debug_dir / filename).write_text(response.text, encoding="utf-8", errors="replace")
+        (debug_dir / f"{filename}.url.txt").write_text(response.url, encoding="utf-8")
 
     def _ensure_login_succeeded(self, response: requests.Response) -> None:
         url_upper = response.url.upper()
@@ -276,10 +307,8 @@ def is_session_registered(html: str, session_code: str) -> bool:
         "INSCRITO",
         "INSCRITA",
         "INSCRIPCION",
-        "INSCRIPCIÓN",
         "CANCEL REGISTRATION",
         "CANCELAR INSCRIPCION",
-        "CANCELAR INSCRIPCIÓN",
         "ANULAR",
     )
 
@@ -287,12 +316,18 @@ def is_session_registered(html: str, session_code: str) -> bool:
         row_text = row.get_text(separator=" ", strip=True)
         if not _matches_code(row_text, "", code):
             continue
-        row_text_upper = row_text.upper()
+        row_text_upper = _normalize_for_matching(row_text)
         has_cancel_link = any(_is_cancel_href(link.get("href", "")) for link in row.find_all("a"))
         if has_cancel_link or any(term in row_text_upper for term in status_terms):
             return True
 
     return False
+
+
+def _normalize_for_matching(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
+    return without_accents.upper()
 
 
 def _reservation_link_from_anchor(
