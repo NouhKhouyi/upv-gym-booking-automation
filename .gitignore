@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 debug/
+artifact-debug/
+booking-debug*.zip
 **/dni.txt
 **/contra.txt
 
