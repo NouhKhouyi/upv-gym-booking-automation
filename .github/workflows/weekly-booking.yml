@@ -64,6 +64,7 @@ jobs:
         env:
           UPV_DNI: ${{ secrets.UPV_DNI }}
           UPV_PASSWORD: ${{ secrets.UPV_PASSWORD }}
+          UPV_ACTIVITY_URL: ${{ vars.UPV_ACTIVITY_URL }}
           UPV_MAX_ATTEMPTS: "3"
           BOOKING_CODES: ${{ github.event.inputs.codes || vars.UPV_SESSION_CODES }}
           MANUAL_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}

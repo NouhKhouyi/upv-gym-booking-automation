@@ -1,27 +1,17 @@
 # UPV Gym Booking Automation
 
-Automation toolkit for finding and optionally attempting UPV gym reservation links.
+Self-hosted automation for UPV gym reservations. It logs in with your own UPV account, reads the current gym activity table, finds the sessions you want, and reserves them either from the CLI, from a small FastAPI service, or automatically with GitHub Actions.
 
-This repository started as two exploratory scripts: one with Selenium and one with direct HTTP requests. The maintained version is now a small Python package with a CLI, an optional FastAPI web service, tests, Docker support, and a safer configuration model based on environment variables.
+> Unofficial project. Use it only with your own account and respect UPV reservation rules.
 
-> Not an official UPV project. Use it only with your own account and only if it complies with the UPV rules for reservations and system usage.
+## Current Setup
 
-## What It Does
-
-- Logs in to the UPV intranet with credentials provided by environment variables.
-- Loads the configured gym activity page.
-- Parses reservation links whose labels match target session codes such as `MUS009`.
-- Runs in `dry-run` mode by default so you can verify candidates before attempting a real booking.
-- Can attempt reservations with retry control when explicitly launched with `--reserve`.
-- Exposes an optional self-hosted web service for health checks, dry runs, and protected reservation triggers.
-
-## What Changed From The Legacy Scripts
-
-- No hard-coded local Chrome paths or `chromedriver.exe`.
-- No committed `dni.txt`, `contra.txt`, browser cookies, or personal headers.
-- No mutation of lists while iterating over reservation links.
-- Network behavior is wrapped in a reusable client and covered by parser/config tests.
-- The public repo ignores the old local folders and generated CSV/notebook artifacts.
+- Maintained implementation: Python package in `src/upv_gym_booking`.
+- Main backend: `requests` + `BeautifulSoup`, no browser driver required.
+- Default activity endpoint: current `sic_depact.HSemActividades` gym page.
+- Reservation flow: `HSemActMatri` action, then activity-page refresh and confirmation check.
+- Weekly automation: `.github/workflows/weekly-booking.yml`.
+- Default schedule: every Saturday at `10:00 Europe/Madrid`.
 
 ## Quick Start
 
@@ -33,23 +23,59 @@ python -m pip install -e ".[dev,web]"
 Copy-Item .env.example .env
 ```
 
-Edit `.env` with your own credentials. Keep `UPV_DRY_RUN=true` until you have verified the output.
+Edit `.env` with your own credentials.
+
+Test without booking:
 
 ```powershell
-upv-gym-booking --dry-run --codes 009,024,039
+upv-gym-booking --dry-run --codes 045 --debug-dir debug\test045 -v
 ```
 
-Attempt real reservations only when you are ready:
+Reserve one session:
 
 ```powershell
-upv-gym-booking --reserve --codes 009,024,039 --attempts 3
+upv-gym-booking --reserve --codes 045 --attempts 1 --debug-dir debug\reserve045 -v
 ```
 
-You can also run the package module directly:
+## GitHub Actions Automation
 
-```powershell
-python -m upv_gym_booking --dry-run
+Configure the repository in GitHub:
+
+Secrets:
+
+```text
+UPV_DNI
+UPV_PASSWORD
 ```
+
+Variables:
+
+```text
+UPV_SESSION_CODES=045,060,075
+```
+
+Optional variable if UPV changes the activity URL:
+
+```text
+UPV_ACTIVITY_URL=https://intranet.upv.es/pls/soalu/sic_depact.HSemActividades?...
+```
+
+The scheduled workflow runs every Saturday at `10:00 Europe/Madrid` and uses real reservation mode. Manual workflow runs also default to real reservation mode; set `dry_run=true` only when you want a test run.
+
+Manual test path:
+
+```text
+Actions > Weekly UPV booking > Run workflow
+```
+
+Use:
+
+```text
+codes: 045
+dry_run: false
+```
+
+Every run uploads a `booking-debug` artifact with the detected links and, for real reservations, the action and refresh HTML used to confirm the booking.
 
 ## Configuration
 
@@ -59,12 +85,12 @@ The app loads `.env` automatically if present.
 | --- | --- | --- | --- |
 | `UPV_DNI` | yes | none | UPV login identifier. |
 | `UPV_PASSWORD` | yes | none | UPV password. |
-| `UPV_SESSION_CODES` | no | `009,024,039,054,069,010,025,040,055,070` | Target session codes. Both `009` and `MUS009` are accepted. |
-| `UPV_DRY_RUN` | no | `true` | Safe mode. If true, no booking request is sent. |
+| `UPV_SESSION_CODES` | no | `009,024,039,054,069,010,025,040,055,070` | Target session codes. Both `045` and `MUS045` are accepted. |
+| `UPV_ACTIVITY_URL` | no | packaged current gym URL | Activity listing page. Override when UPV changes endpoints. |
+| `UPV_DRY_RUN` | no | `true` | Safe local default. |
 | `UPV_MAX_ATTEMPTS` | no | `3` | Retry attempts for real bookings. |
 | `UPV_RETRY_SECONDS` | no | `5` | Delay between retries. |
 | `UPV_TIMEOUT_SECONDS` | no | `15` | HTTP timeout. |
-| `UPV_ACTIVITY_URL` | no | current gym URL | Override if the UPV endpoint changes. |
 | `UPV_ADMIN_TOKEN` | web only | none | Token required by `POST /reserve`. |
 
 ## Web Service
@@ -75,19 +101,19 @@ Run locally:
 uvicorn upv_gym_booking.web:app --reload
 ```
 
-Or with Docker:
+Endpoints:
+
+- `GET /health`
+- `GET /dry-run?codes=045,060`
+- `POST /reserve?codes=045,060` with `X-Admin-Token`
+
+Docker:
 
 ```powershell
 docker compose up --build
 ```
 
-Endpoints:
-
-- `GET /health`: liveness check.
-- `GET /dry-run?codes=045,060`: logs in, parses candidate links, never books.
-- `POST /reserve?codes=045,060`: attempts real reservations and requires `X-Admin-Token: <UPV_ADMIN_TOKEN>`.
-
-Do not run a public service that collects DNI/passwords from other people. The safer open-source model is self-hosted: each user deploys their own instance and stores their own secrets.
+Do not run a public shared service that collects other students' UPV credentials. The intended public model is open-source and self-hosted.
 
 ## Development
 
@@ -96,22 +122,24 @@ ruff check .
 pytest
 ```
 
-CI runs the same checks on Python 3.11 and 3.12.
+CI runs lint and tests on Python 3.11 and 3.12.
 
 ## Project Layout
 
 ```text
 src/upv_gym_booking/
-  client.py      HTTP login, parsing and reservation flow
-  config.py      env/.env configuration
-  cli.py         command-line interface
-  web.py         optional FastAPI app
-tests/           offline tests for parser and config behavior
-docs/            architecture, security and hosting notes
+  client.py      Login, parsing, reservation and confirmation flow
+  config.py      Environment and .env configuration
+  cli.py         Command-line interface and debug artifacts
+  web.py         Optional FastAPI app
+tests/           Offline tests for parser, config and confirmation behavior
+docs/            Architecture, hosting and security notes
 ```
 
-## Hosting Direction
+## Security
 
-For personal automation, prefer a scheduled job instead of a public multi-user web app. For a public-looking project, publish this repo, document self-hosting, and optionally provide a small hosted demo that does not accept real credentials.
+Never commit `.env`, `dni.txt`, `contra.txt`, debug artifacts, cookies, notebooks with outputs, or browser profiles. This repo ignores those by default. If real credentials were ever pushed to a public remote, rotate the UPV password.
 
-See [docs/HOSTING.md](docs/HOSTING.md) for concrete deployment options.
+## Legacy Cleanup
+
+The original Selenium scripts and exploratory notebooks were removed from `main` because they depended on local machine paths, browser binaries, cookies and ad hoc credential files. The maintained code path is the package in `src/`.
