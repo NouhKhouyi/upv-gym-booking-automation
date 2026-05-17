@@ -8,13 +8,13 @@ on:
         required: false
         type: string
       dry_run:
-        description: "Use true to test without booking. Scheduled runs always reserve."
+        description: "Use true only for a dry-run test. Scheduled runs always reserve."
         required: true
-        default: "true"
+        default: "false"
         type: choice
         options:
-          - "true"
           - "false"
+          - "true"
   schedule:
     - cron: "0 10 * * SAT"
       timezone: "Europe/Madrid"
@@ -66,7 +66,7 @@ jobs:
           UPV_PASSWORD: ${{ secrets.UPV_PASSWORD }}
           UPV_MAX_ATTEMPTS: "3"
           BOOKING_CODES: ${{ github.event.inputs.codes || vars.UPV_SESSION_CODES }}
-          MANUAL_DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          MANUAL_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
             MODE="--reserve"
